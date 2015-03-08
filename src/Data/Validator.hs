@@ -1,0 +1,132 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+module Data.Validator
+    ( -- * core monad and runners
+      ValidationM, ValidationT(..)
+    , runValidator, runValidatorT
+      -- * combinators
+    , (+>>)
+      -- * checks
+    , minLength, maxLength, lengthBetween, notEmpty
+    , largerThan, smallerThan, valueBetween
+    , matchesRegex
+    , conformsPred, conformsPredM
+      -- * helper classes and types
+    , HasLength(..), Stringable(..)
+    , Int64
+      -- * reexports
+    , re, mkRegexQQ, Regex
+    )
+where
+
+import Control.Applicative
+import Control.Monad
+import Control.Monad.Identity
+import Control.Monad.Trans
+import Control.Monad.Trans.Either
+import Data.Int
+import Data.Stringable hiding (length)
+import Text.Regex.PCRE.Heavy
+import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
+
+-- | The validation monad
+type ValidationM e = ValidationT e Identity
+
+-- | The validation monad transformer
+newtype ValidationT e m a
+    = ValidationT { unValidationT :: EitherT e m a }
+      deriving (Monad, Functor, Applicative, Alternative, MonadPlus, MonadTrans)
+
+-- | Run a validation on a type 'a'
+runValidator :: (a -> ValidationM e a) -> a -> Either e a
+runValidator a b = runIdentity $ runValidatorT a b
+
+-- | Run a validation on a type 'a'
+runValidatorT :: Monad m => (a -> ValidationT e m a) -> a -> m (Either e a)
+runValidatorT validationSteps input =
+    runEitherT $ unValidationT (validationSteps input)
+
+-- | All types that have a length, eg. 'String', '[a]', 'Vector a', etc.
+class HasLength a where
+    getLength :: a -> Int64
+
+instance HasLength [a] where
+    getLength = fromIntegral . length
+
+instance HasLength T.Text where
+    getLength = fromIntegral . T.length
+
+instance HasLength TL.Text where
+    getLength = TL.length
+
+instance HasLength BS.ByteString where
+    getLength = fromIntegral . BS.length
+
+instance HasLength BSL.ByteString where
+    getLength = BSL.length
+
+-- | Mark a custom check as failed
+checkFailed :: Monad m => e -> ValidationT e m a
+checkFailed = ValidationT . left
+{-# INLINE checkFailed #-}
+
+-- | Combine two checks
+(+>>) :: Monad m => (a -> ValidationT e m a) -> (a -> ValidationT e m a) -> a -> ValidationT e m a
+(+>>) m1 m2 a =
+    m1 a >>= m2
+{-# INLINE (+>>) #-}
+
+-- | Check that the value is at least N elements long
+minLength :: (Monad m, HasLength a) => Int64 -> e -> a -> ValidationT e m a
+minLength lowerBound e obj =
+    largerThan lowerBound e (getLength obj) >> return obj
+
+-- | Check that the value is at maxium N elements long
+maxLength :: (Monad m, HasLength a) => Int64 -> e -> a -> ValidationT e m a
+maxLength upperBound e obj =
+    smallerThan upperBound e (getLength obj) >> return obj
+
+-- | Check that the value's length is between N and M
+lengthBetween :: (Monad m, HasLength a) => Int64 -> Int64 -> e -> a -> ValidationT e m a
+lengthBetween lowerBound upperBound e obj =
+    valueBetween lowerBound upperBound e (getLength obj) >> return obj
+
+-- | Specialized minLength with N = 1
+notEmpty :: (Monad m, HasLength a) => e -> a -> ValidationT e m a
+notEmpty = minLength 1
+{-# INLINE notEmpty #-}
+
+-- | Check that a value is larger than N
+largerThan :: (Monad m, Ord a) => a -> e -> a -> ValidationT e m a
+largerThan lowerBound = conformsPred (>= lowerBound)
+
+-- | Check that a value is smaller than N
+smallerThan :: (Monad m, Ord a) => a -> e -> a -> ValidationT e m a
+smallerThan upperBound = conformsPred (<= upperBound)
+
+-- | Check that a value is between M and N
+valueBetween :: (Monad m, Ord a) => a -> a -> e -> a -> ValidationT e m a
+valueBetween lowerBound upperBound e obj =
+    (largerThan lowerBound e +>> smallerThan upperBound e) obj
+
+-- | Check that a value conforms a predicate
+conformsPred :: Monad m => (a -> Bool) -> e -> a -> ValidationT e m a
+conformsPred predicate e obj =
+    do unless (predicate obj) $ checkFailed e
+       return obj
+
+-- | Check that a value conforms a predicate
+conformsPredM :: Monad m => (a -> m Bool) -> e -> a -> ValidationT e m a
+conformsPredM predicate e obj =
+    do res <- lift $ predicate obj
+       unless res $ checkFailed e
+       return obj
+
+-- | Checks that a value matches a regular expression
+matchesRegex :: (Stringable a, Monad m) => Regex -> e -> a -> ValidationT e m a
+matchesRegex r = conformsPred (\obj -> obj =~ r)

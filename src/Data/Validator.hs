@@ -2,20 +2,20 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Data.Validator
-    ( -- * core monad and runners
+    ( -- * Core monad and runners
       ValidationM, ValidationT, ValidationRule, ValidationRuleT
     , runValidator, runValidatorT
-      -- * combinators
+      -- * Combinators
     , (>=>), (<=<)
-      -- * checks
+      -- * Checks
     , minLength, maxLength, lengthBetween, notEmpty
     , largerThan, smallerThan, valueBetween
     , matchesRegex
     , conformsPred, conformsPredM
-      -- * helper classes and types
+      -- * Helper classes and types
     , HasLength(..), Stringable(..)
     , Int64
-      -- * reexports
+      -- * Regular expression helpers
     , re, mkRegexQQ, Regex
     )
 where
@@ -52,10 +52,10 @@ runValidatorT validationSteps input =
     runEitherT $ unValidationT (validationSteps input)
 {-# INLINE runValidatorT #-}
 
--- | A validation rule. Combine using >=> or <=< from Control.Monad
+-- | A validation rule. Combine using @('>=>')@ or @('<=<')@
 type ValidationRule e a = ValidationRuleT e Identity a
 
--- | A validation rule. Combine using >=> or <=< from Control.Monad
+-- | A validation rule. Combine using @('>=>')@ or @('<=<')@
 type ValidationRuleT e m a = a -> ValidationT e m a
 
 -- | All types that have a length, eg. 'String', '[a]', 'Vector a', etc.

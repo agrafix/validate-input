@@ -17,10 +17,10 @@ data Example
    
 checkUsername =
     lengthBetween 3 12 "Should between 3 and 12 chars"
-    +>> matchesRegex [re|^[A-za-z0-9]+$|] "only alpha num"
+    >=> matchesRegex [re|^[A-za-z0-9]+$|] "only alpha num"
     
 checkNumber =
-    largerThan 5 "No more than 5 dogs allowed"
+    smallerThan 5 "No more than 5 dogs allowed"
 
 checkExample e =
     Example <$> checkUsername (ex_username e)

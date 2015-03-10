@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Data.Validator
     ( -- * core monad and runners
-      ValidationM, ValidationT, Validation
+      ValidationM, ValidationT, ValidationRule, ValidationRuleT
     , runValidator, runValidatorT
       -- * combinators
     , (>=>), (<=<)
@@ -42,18 +42,21 @@ newtype ValidationT e m a
       deriving (Monad, Functor, Applicative, Alternative, MonadPlus, MonadTrans)
 
 -- | Run a validation on a type 'a'
-runValidator :: Validation e Identity a -> a -> Either e a
+runValidator :: ValidationRule e a -> a -> Either e a
 runValidator a b = runIdentity $ runValidatorT a b
 {-# INLINE runValidator #-}
 
 -- | Run a validation on a type 'a'
-runValidatorT :: Monad m => Validation e m a -> a -> m (Either e a)
+runValidatorT :: Monad m => ValidationRuleT e m a -> a -> m (Either e a)
 runValidatorT validationSteps input =
     runEitherT $ unValidationT (validationSteps input)
 {-# INLINE runValidatorT #-}
 
 -- | A validation rule. Combine using >=> or <=< from Control.Monad
-type Validation e m a = a -> ValidationT e m a
+type ValidationRule e a = ValidationRuleT e Identity a
+
+-- | A validation rule. Combine using >=> or <=< from Control.Monad
+type ValidationRuleT e m a = a -> ValidationT e m a
 
 -- | All types that have a length, eg. 'String', '[a]', 'Vector a', etc.
 class HasLength a where
@@ -85,54 +88,54 @@ checkFailed = ValidationT . left
 {-# INLINE checkFailed #-}
 
 -- | Check that the value is at least N elements long
-minLength :: (Monad m, HasLength a) => Int64 -> e -> Validation e m a
+minLength :: (Monad m, HasLength a) => Int64 -> e -> ValidationRuleT e m a
 minLength lowerBound e obj = largerThan lowerBound e (getLength obj) >> return obj
 {-# INLINE minLength #-}
 
 -- | Check that the value is at maxium N elements long
-maxLength :: (Monad m, HasLength a) => Int64 -> e -> Validation e m a
+maxLength :: (Monad m, HasLength a) => Int64 -> e -> ValidationRuleT e m a
 maxLength upperBound e obj =
     smallerThan upperBound e (getLength obj) >> return obj
 {-# INLINE maxLength #-}
 
 -- | Check that the value's length is between N and M
-lengthBetween :: (Monad m, HasLength a) => Int64 -> Int64 -> e -> Validation e m a
+lengthBetween :: (Monad m, HasLength a) => Int64 -> Int64 -> e -> ValidationRuleT e m a
 lengthBetween lowerBound upperBound e obj = valueBetween lowerBound upperBound e (getLength obj) >> return obj
 {-# INLINE lengthBetween #-}
 
 -- | Specialized minLength with N = 1
-notEmpty :: (Monad m, HasLength a) => e -> Validation e m a
+notEmpty :: (Monad m, HasLength a) => e -> ValidationRuleT e m a
 notEmpty = minLength 1
 {-# INLINE notEmpty #-}
 
 -- | Check that a value is larger than N
-largerThan :: (Monad m, Ord a) => a -> e -> Validation e m a
+largerThan :: (Monad m, Ord a) => a -> e -> ValidationRuleT e m a
 largerThan lowerBound = conformsPred (>= lowerBound)
 {-# INLINE largerThan #-}
 
 -- | Check that a value is smaller than N
-smallerThan :: (Monad m, Ord a) => a -> e -> Validation e m a
+smallerThan :: (Monad m, Ord a) => a -> e -> ValidationRuleT e m a
 smallerThan upperBound = conformsPred (<= upperBound)
 {-# INLINE smallerThan #-}
 
 -- | Check that a value is between M and N
-valueBetween :: (Monad m, Ord a) => a -> a -> e -> Validation e m a
+valueBetween :: (Monad m, Ord a) => a -> a -> e -> ValidationRuleT e m a
 valueBetween lowerBound upperBound e = largerThan lowerBound e >=> smallerThan upperBound e
 {-# INLINE valueBetween #-}
 
 -- | Check that a value conforms a predicate
-conformsPred :: Monad m => (a -> Bool) -> e -> Validation e m a
+conformsPred :: Monad m => (a -> Bool) -> e -> ValidationRuleT e m a
 conformsPred predicate e obj = unless (predicate obj) (checkFailed e) >> return obj
 {-# INLINE conformsPred #-}
 
 -- | Check that a value conforms a predicate
-conformsPredM :: Monad m => (a -> m Bool) -> e -> Validation e m a
+conformsPredM :: Monad m => (a -> m Bool) -> e -> ValidationRuleT e m a
 conformsPredM predicate e obj =
     do res <- lift $ predicate obj
        unless res (checkFailed e) >> return obj
 {-# INLINE conformsPredM #-}
 
 -- | Checks that a value matches a regular expression
-matchesRegex :: (Stringable a, Monad m) => Regex -> e -> Validation e m a
+matchesRegex :: (Stringable a, Monad m) => Regex -> e -> ValidationRuleT e m a
 matchesRegex r = conformsPred (=~ r)
 {-# INLINE matchesRegex #-}

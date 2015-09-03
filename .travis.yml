@@ -1,37 +1,41 @@
 language: haskell
-
 env:
-  - GHCVER=7.8.3
-  - GHCVER=7.10.1
-  - GHCVER=head
-
+- GHCVER=7.8.4
+- GHCVER=7.10.2
+- GHCVER=head
 matrix:
   allow_failures:
-    - env: GHCVER=head
-
+  - env: GHCVER=head
 before_install:
-  - |
-    if [ $GHCVER = `ghc --numeric-version` ]; then
-      travis/cabal-apt-install --enable-tests $MODE
-      export CABAL=cabal
-    else
-      travis_retry sudo add-apt-repository -y ppa:hvr/ghc
-      travis_retry sudo apt-get update
-      travis_retry sudo apt-get install cabal-install-1.22 ghc-$GHCVER happy
-      export CABAL=cabal-1.22
-      export PATH=/opt/ghc/$GHCVER/bin:$PATH
-    fi
-  - $CABAL update
-  - |
-    if [ $GHCVER = "head" ] || [ $GHCVER = "7.8.3" ] || [ $GHCVER = "7.10.1" ]; then
-      $CABAL install happy alex
-      export PATH=$HOME/.cabal/bin:$PATH
-    fi
+- |
+  if [ $GHCVER = `ghc --numeric-version` ]; then
+    travis/cabal-apt-install --enable-tests $MODE
+    export CABAL=cabal
+  else
+    travis_retry sudo add-apt-repository -y ppa:hvr/ghc
+    travis_retry sudo apt-get update
+    travis_retry sudo apt-get install cabal-install-1.22 ghc-$GHCVER happy
+    export CABAL=cabal-1.22
+    export PATH=/opt/ghc/$GHCVER/bin:$PATH
+  fi
+- $CABAL update
+- |
+  $CABAL install happy alex
+  export PATH=$HOME/.cabal/bin:$PATH
 install:
-  - $CABAL install --dependencies-only --enable-tests
-  - $CABAL configure -flib-Werror --enable-tests $MODE
-
+- $CABAL install --dependencies-only --enable-tests
+- $CABAL configure -flib-Werror --enable-tests $MODE
 script:
-  - $CABAL check
-  - $CABAL build
-  - $CABAL test --show-details=always
+- ghc --numeric-version
+- $CABAL check
+- $CABAL build
+- $CABAL test --show-details=always
+deploy:
+  provider: hackage
+  username: AlexanderThiemann
+  skip_cleanup: true
+  on:
+    condition: $GHCVER = 7.10.2
+    tags: true
+  password:
+    secure: HfqxaGZojKsis0KKTyjNCbUdpQnV8DcesZwQwXRgIEvlcLi8Kf2wTYciEljMzDwig+mDHS9CHXJFP5aRgfGgklAy49kP8Sq8/WuWCN2ORPDhxEbnpIvMtx5+asKsM0OlLTNaztuzFeju3pe6UHgnCK64d8f7l+kKbjNN3lV1M/I=

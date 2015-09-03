@@ -16,3 +16,4 @@ cabal.sandbox.config
 *.hp
 .idea/
 validate-input.iml
+.stack-work/

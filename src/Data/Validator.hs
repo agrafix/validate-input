@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Data.Validator
@@ -13,7 +14,7 @@ module Data.Validator
     , matchesRegex
     , conformsPred, conformsPredM
       -- * Helper classes and types
-    , HasLength(..), Stringable(..)
+    , HasLength(..), ConvertibleStrings(..)
     , Int64
       -- * Regular expression helpers
     , re, mkRegexQQ, Regex
@@ -26,7 +27,7 @@ import Control.Monad.Identity
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
 import Data.Int
-import Data.Stringable hiding (length)
+import Data.String.Conversions
 import Text.Regex.PCRE.Heavy
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
@@ -136,6 +137,6 @@ conformsPredM predicate e obj =
 {-# INLINE conformsPredM #-}
 
 -- | Checks that a value matches a regular expression
-matchesRegex :: (Stringable a, Monad m) => Regex -> e -> ValidationRuleT e m a
+matchesRegex :: (ConvertibleStrings SBS a, ConvertibleStrings a SBS, Monad m) => Regex -> e -> ValidationRuleT e m a
 matchesRegex r = conformsPred (=~ r)
 {-# INLINE matchesRegex #-}

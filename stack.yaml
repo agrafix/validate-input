@@ -1,0 +1,6 @@
+flags: {}
+packages:
+- '.'
+extra-deps:
+- pcre-heavy-1.0.0.1
+resolver: lts-3.4

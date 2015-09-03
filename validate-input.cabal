@@ -16,6 +16,9 @@ cabal-version:       >=1.10
 tested-with:
     GHC == 7.8.4, GHC == 7.10.2
 
+extra-source-files:
+    README.md
+
 source-repository head
   type: git
   location: https://github.com/agrafix/validate-input

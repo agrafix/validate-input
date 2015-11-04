@@ -4,7 +4,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Data.Validator
     ( -- * Core monad and runners
-      ValidationM, ValidationT, ValidationRule, ValidationRuleT
+      ValidationM, ValidationT
+    , ValidationRule, ValidationRuleT
+    , TransValidationRule, TransValidationRuleT
     , runValidator, runValidatorT
       -- * Combinators
     , (>=>), (<=<)
@@ -13,6 +15,9 @@ module Data.Validator
     , largerThan, smallerThan, valueBetween
     , matchesRegex
     , conformsPred, conformsPredM
+      -- * Transforming checks
+    , requiredValue, nonEmptyList
+    , conformsPredTrans, conformsPredTransM
       -- * Helper classes and types
     , HasLength(..), ConvertibleStrings(..)
     , Int64
@@ -29,6 +34,7 @@ import Control.Monad.Trans.Either
 import Data.Int
 import Data.String.Conversions
 import Text.Regex.PCRE.Heavy
+import qualified Data.List.NonEmpty as NEL
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.ByteString as BS
@@ -43,12 +49,12 @@ newtype ValidationT e m a
       deriving (Monad, Functor, Applicative, Alternative, MonadPlus, MonadTrans)
 
 -- | Run a validation on a type 'a'
-runValidator :: ValidationRule e a -> a -> Either e a
+runValidator :: TransValidationRule e a b -> a -> Either e b
 runValidator a b = runIdentity $ runValidatorT a b
 {-# INLINE runValidator #-}
 
 -- | Run a validation on a type 'a'
-runValidatorT :: Monad m => ValidationRuleT e m a -> a -> m (Either e a)
+runValidatorT :: Monad m => TransValidationRuleT e m a b -> a -> m (Either e b)
 runValidatorT validationSteps input =
     runEitherT $ unValidationT (validationSteps input)
 {-# INLINE runValidatorT #-}
@@ -57,7 +63,13 @@ runValidatorT validationSteps input =
 type ValidationRule e a = ValidationRuleT e Identity a
 
 -- | A validation rule. Combine using @('>=>')@ or @('<=<')@
-type ValidationRuleT e m a = a -> ValidationT e m a
+type ValidationRuleT e m a = TransValidationRuleT e m a a
+
+-- | A transforming validation rule. Combine using @('>=>')@ or @('<=<')@
+type TransValidationRule e a b = TransValidationRuleT e Identity a b
+
+-- | A transforming validation rule. Combine using @('>=>')@ or @('<=<')@
+type TransValidationRuleT e m a b = a -> ValidationT e m b
 
 -- | All types that have a length, eg. 'String', '[a]', 'Vector a', etc.
 class HasLength a where
@@ -124,6 +136,11 @@ valueBetween :: (Monad m, Ord a) => a -> a -> e -> ValidationRuleT e m a
 valueBetween lowerBound upperBound e = largerThan lowerBound e >=> smallerThan upperBound e
 {-# INLINE valueBetween #-}
 
+-- | Checks that a value matches a regular expression
+matchesRegex :: (ConvertibleStrings SBS a, ConvertibleStrings a SBS, Monad m) => Regex -> e -> ValidationRuleT e m a
+matchesRegex r = conformsPred (=~ r)
+{-# INLINE matchesRegex #-}
+
 -- | Check that a value conforms a predicate
 conformsPred :: Monad m => (a -> Bool) -> e -> ValidationRuleT e m a
 conformsPred predicate e obj = unless (predicate obj) (checkFailed e) >> return obj
@@ -136,7 +153,29 @@ conformsPredM predicate e obj =
        unless res (checkFailed e) >> return obj
 {-# INLINE conformsPredM #-}
 
--- | Checks that a value matches a regular expression
-matchesRegex :: (ConvertibleStrings SBS a, ConvertibleStrings a SBS, Monad m) => Regex -> e -> ValidationRuleT e m a
-matchesRegex r = conformsPred (=~ r)
-{-# INLINE matchesRegex #-}
+-- | Check that an optional value is actually set to 'Just a'
+requiredValue :: Monad m => e -> TransValidationRuleT e m (Maybe a) a
+requiredValue = conformsPredTrans id
+{-# INLINE requiredValue #-}
+
+-- | Check that a list is not empty
+nonEmptyList :: Monad m => e -> TransValidationRuleT e m [a] (NEL.NonEmpty a)
+nonEmptyList = conformsPredTrans NEL.nonEmpty
+{-# INLINE nonEmptyList #-}
+
+-- | Do some check returning 'Nothing' if the value is invalid and 'Just a' otherwise.
+conformsPredTrans :: Monad m => (a -> Maybe b) -> e -> TransValidationRuleT e m a b
+conformsPredTrans f e obj =
+    case f obj of
+      Nothing -> checkFailed e
+      Just val -> return val
+{-# INLINE conformsPredTrans #-}
+
+-- | Do some check returning 'Nothing' if the value is invalid and 'Just a' otherwise.
+conformsPredTransM :: Monad m => (a -> m (Maybe b)) -> e -> TransValidationRuleT e m a b
+conformsPredTransM f e obj =
+    do res <- lift $ f obj
+       case res of
+         Nothing -> checkFailed e
+         Just val -> return val
+{-# INLINE conformsPredTransM #-}

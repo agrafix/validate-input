@@ -24,6 +24,14 @@ data Example
    = Example
    { ex_username :: T.Text
    , ex_dogs :: Int
+   , ex_friendName :: Maybe T.Text
+   } deriving (Show)
+
+data ExampleChecked
+   = ExampleChecked
+   { exc_username :: T.Text
+   , exc_dogs :: Int
+   , exc_friendName :: T.Text
    } deriving (Show)
 
 main :: IO ()
@@ -40,17 +48,20 @@ checkNumber :: Monad m => ValidationRuleT String m Int
 checkNumber =
     smallerThan 5 "No more than 5 dogs allowed"
 
-checkExample :: Monad m => ValidationRuleT String m Example
+checkExample :: Monad m => TransValidationRuleT String m Example ExampleChecked
 checkExample e =
-    Example <$> checkUsername (ex_username e)
-            <*> checkNumber (ex_dogs e)
+    ExampleChecked
+    <$> checkUsername (ex_username e)
+    <*> checkNumber (ex_dogs e)
+    <*> requiredValue "You must provide a friend name!" (ex_friendName e)
 
-example :: Either String Example
+example :: Either String ExampleChecked
 example =
     runValidator checkExample $
     Example
     { ex_username = "alex"
     , ex_dogs = 23
+    , ex_friendName = Nothing
     }
 
 ```

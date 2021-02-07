@@ -78,10 +78,9 @@ example =
 
 ### Supported GHC Versions
 
-* 7.8.4
-* 7.10.2
+* 8.8.4
 
 ### License
 
 Released under the MIT license.
-(c) 2015 Alexander Thiemann
+(c) 2015-2021 Alexander Thiemann

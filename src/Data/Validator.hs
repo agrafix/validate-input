@@ -30,22 +30,22 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.Trans
-import Control.Monad.Trans.Either
+import Control.Monad.Trans.Except
 import Data.Int
 import Data.String.Conversions
 import Text.Regex.PCRE.Heavy
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.List.NonEmpty as NEL
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BSL
 
 -- | The validation monad
 type ValidationM e = ValidationT e Identity
 
 -- | The validation monad transformer
 newtype ValidationT e m a
-    = ValidationT { unValidationT :: EitherT e m a }
+    = ValidationT { unValidationT :: ExceptT e m a }
       deriving (Monad, Functor, Applicative, Alternative, MonadPlus, MonadTrans)
 
 -- | Run a validation on a type 'a'
@@ -56,7 +56,7 @@ runValidator a b = runIdentity $ runValidatorT a b
 -- | Run a validation on a type 'a'
 runValidatorT :: Monad m => TransValidationRuleT e m a b -> a -> m (Either e b)
 runValidatorT validationSteps input =
-    runEitherT $ unValidationT (validationSteps input)
+    runExceptT $ unValidationT (validationSteps input)
 {-# INLINE runValidatorT #-}
 
 -- | A validation rule. Combine using @('>=>')@ or @('<=<')@
@@ -97,7 +97,7 @@ instance HasLength BSL.ByteString where
 
 -- | Mark a custom check as failed
 checkFailed :: Monad m => e -> ValidationT e m a
-checkFailed = ValidationT . left
+checkFailed = ValidationT . throwE
 {-# INLINE checkFailed #-}
 
 -- | Check that the value is at least N elements long

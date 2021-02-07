@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    stackYaml: "stack.yaml"
+    components:
+      - path: "./src"
+        component: "validate-input:lib"
+      - path: "./test"
+        component: "validate-input:test:validate-input-tests"

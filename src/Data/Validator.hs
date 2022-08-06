@@ -1,29 +1,46 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+
 module Data.Validator
-    ( -- * Core monad and runners
-      ValidationM, ValidationT
-    , ValidationRule, ValidationRuleT
-    , TransValidationRule, TransValidationRuleT
-    , runValidator, runValidatorT
-      -- * Combinators
-    , (>=>), (<=<)
-      -- * Checks
-    , minLength, maxLength, lengthBetween, notEmpty
-    , largerThan, smallerThan, valueBetween
-    , matchesRegex
-    , conformsPred, conformsPredM
-      -- * Transforming checks
-    , requiredValue, nonEmptyList
-    , conformsPredTrans, conformsPredTransM
-      -- * Helper classes and types
-    , HasLength(..), ConvertibleStrings(..)
-    , Int64
-      -- * Regular expression helpers
-    , re, mkRegexQQ, Regex
-    )
+  ( -- * Core monad and runners
+    ValidationM,
+    ValidationT,
+    ValidationRule,
+    ValidationRuleT,
+    TransValidationRule,
+    TransValidationRuleT,
+    runValidator,
+    runValidatorT,
+
+    -- * Combinators
+    (>=>),
+    (<=<),
+
+    -- * Checks
+    minLength,
+    maxLength,
+    lengthBetween,
+    notEmpty,
+    largerThan,
+    smallerThan,
+    valueBetween,
+    matchesRegex,
+    conformsPred,
+    conformsPredM,
+
+    -- * Transforming checks
+    requiredValue,
+    nonEmptyList,
+    conformsPredTrans,
+    conformsPredTransM,
+
+    -- * Helper classes and types
+    HasLength (..),
+    ConvertibleStrings (..),
+    Int64,
+  )
 where
 
 import Control.Applicative
@@ -31,22 +48,21 @@ import Control.Monad
 import Control.Monad.Identity
 import Control.Monad.Trans
 import Control.Monad.Trans.Except
-import Data.Int
-import Data.String.Conversions
-import Text.Regex.PCRE.Heavy
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
+import Data.Int
 import qualified Data.List.NonEmpty as NEL
+import Data.String.Conversions
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
+import qualified Text.Regex.TDFA as RE
 
 -- | The validation monad
 type ValidationM e = ValidationT e Identity
 
 -- | The validation monad transformer
-newtype ValidationT e m a
-    = ValidationT { unValidationT :: ExceptT e m a }
-      deriving (Monad, Functor, Applicative, Alternative, MonadPlus, MonadTrans)
+newtype ValidationT e m a = ValidationT {unValidationT :: ExceptT e m a}
+  deriving (Monad, Functor, Applicative, Alternative, MonadPlus, MonadTrans)
 
 -- | Run a validation on a type 'a'
 runValidator :: TransValidationRule e a b -> a -> Either e b
@@ -56,7 +72,7 @@ runValidator a b = runIdentity $ runValidatorT a b
 -- | Run a validation on a type 'a'
 runValidatorT :: Monad m => TransValidationRuleT e m a b -> a -> m (Either e b)
 runValidatorT validationSteps input =
-    runExceptT $ unValidationT (validationSteps input)
+  runExceptT $ unValidationT (validationSteps input)
 {-# INLINE runValidatorT #-}
 
 -- | A validation rule. Combine using @('>=>')@ or @('<=<')@
@@ -73,27 +89,27 @@ type TransValidationRuleT e m a b = a -> ValidationT e m b
 
 -- | All types that have a length, eg. 'String', '[a]', 'Vector a', etc.
 class HasLength a where
-    getLength :: a -> Int64
+  getLength :: a -> Int64
 
 instance HasLength [a] where
-    getLength = fromIntegral . length
-    {-# INLINE getLength #-}
+  getLength = fromIntegral . length
+  {-# INLINE getLength #-}
 
 instance HasLength T.Text where
-    getLength = fromIntegral . T.length
-    {-# INLINE getLength #-}
+  getLength = fromIntegral . T.length
+  {-# INLINE getLength #-}
 
 instance HasLength TL.Text where
-    getLength = TL.length
-    {-# INLINE getLength #-}
+  getLength = TL.length
+  {-# INLINE getLength #-}
 
 instance HasLength BS.ByteString where
-    getLength = fromIntegral . BS.length
-    {-# INLINE getLength #-}
+  getLength = fromIntegral . BS.length
+  {-# INLINE getLength #-}
 
 instance HasLength BSL.ByteString where
-    getLength = BSL.length
-    {-# INLINE getLength #-}
+  getLength = BSL.length
+  {-# INLINE getLength #-}
 
 -- | Mark a custom check as failed
 checkFailed :: Monad m => e -> ValidationT e m a
@@ -108,7 +124,7 @@ minLength lowerBound e obj = largerThan lowerBound e (getLength obj) >> return o
 -- | Check that the value is at maxium N elements long
 maxLength :: (Monad m, HasLength a) => Int64 -> e -> ValidationRuleT e m a
 maxLength upperBound e obj =
-    smallerThan upperBound e (getLength obj) >> return obj
+  smallerThan upperBound e (getLength obj) >> return obj
 {-# INLINE maxLength #-}
 
 -- | Check that the value's length is between N and M
@@ -137,8 +153,15 @@ valueBetween lowerBound upperBound e = largerThan lowerBound e >=> smallerThan u
 {-# INLINE valueBetween #-}
 
 -- | Checks that a value matches a regular expression
-matchesRegex :: (ConvertibleStrings SBS a, ConvertibleStrings a SBS, Monad m) => Regex -> e -> ValidationRuleT e m a
-matchesRegex r = conformsPred (=~ r)
+matchesRegex ::
+  ( RE.RegexLike RE.Regex a,
+    RE.RegexMaker RE.Regex RE.CompOption RE.ExecOption regex,
+    Monad m
+  ) =>
+  regex ->
+  e ->
+  ValidationRuleT e m a
+matchesRegex r = conformsPred (RE.=~ r)
 {-# INLINE matchesRegex #-}
 
 -- | Check that a value conforms a predicate
@@ -149,8 +172,9 @@ conformsPred predicate e obj = unless (predicate obj) (checkFailed e) >> return 
 -- | Check that a value conforms a predicate
 conformsPredM :: Monad m => (a -> m Bool) -> e -> ValidationRuleT e m a
 conformsPredM predicate e obj =
-    do res <- lift $ predicate obj
-       unless res (checkFailed e) >> return obj
+  do
+    res <- lift $ predicate obj
+    unless res (checkFailed e) >> return obj
 {-# INLINE conformsPredM #-}
 
 -- | Check that an optional value is actually set to 'Just a'
@@ -166,16 +190,17 @@ nonEmptyList = conformsPredTrans NEL.nonEmpty
 -- | Do some check returning 'Nothing' if the value is invalid and 'Just a' otherwise.
 conformsPredTrans :: Monad m => (a -> Maybe b) -> e -> TransValidationRuleT e m a b
 conformsPredTrans f e obj =
-    case f obj of
-      Nothing -> checkFailed e
-      Just val -> return val
+  case f obj of
+    Nothing -> checkFailed e
+    Just val -> return val
 {-# INLINE conformsPredTrans #-}
 
 -- | Do some check returning 'Nothing' if the value is invalid and 'Just a' otherwise.
 conformsPredTransM :: Monad m => (a -> m (Maybe b)) -> e -> TransValidationRuleT e m a b
 conformsPredTransM f e obj =
-    do res <- lift $ f obj
-       case res of
-         Nothing -> checkFailed e
-         Just val -> return val
+  do
+    res <- lift $ f obj
+    case res of
+      Nothing -> checkFailed e
+      Just val -> return val
 {-# INLINE conformsPredTransM #-}

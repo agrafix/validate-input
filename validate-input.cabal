@@ -1,5 +1,5 @@
 name:                validate-input
-version:             0.5.0.0
+version:             0.6.0.0
 synopsis:            Input validation combinator library
 description:         A small Haskell combinator library that provides a simple way of
                      validating user provided data structures.
@@ -9,7 +9,7 @@ license:             MIT
 license-file:        LICENSE
 author:              Alexander Thiemann <mail@athiemann.net>
 maintainer:          Alexander Thiemann <mail@athiemann.net>
-copyright:           (c) 2015-2021 Alexander Thiemann
+copyright:           (c) 2015-2022 Alexander Thiemann
 category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
@@ -30,10 +30,10 @@ library
                        bytestring >=0.10,
                        transformers,
                        mtl >=2.1,
-                       pcre-heavy >=1.0,
                        string-conversions >=0.4,
                        semigroups >=0.16,
-                       text >=1.2
+                       text >=1.2,
+                       regex-tdfa >= 1.3
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options:         -Wall -fno-warn-orphans
